@@ -5,6 +5,7 @@ import { AdminModule } from "./admin/admin.module";
 import { AuthModule } from "./auth/auth.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { MailModule } from "./mail/mail.module";
+import { CarModule } from './car/car.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { MailModule } from "./mail/mail.module";
     AuthModule,
     PrismaModule,
     MailModule,
+    CarModule,
   ],
   controllers: [],
   providers: [],

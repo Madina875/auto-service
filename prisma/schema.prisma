@@ -14,13 +14,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
-
 enum Role {
   CLIENT
   OWNER
   WORKER
 }
+
 model User {
   id Int @id @default(autoincrement())
 
@@ -30,16 +29,15 @@ model User {
   hashedPassword     String
   hashedRefreshToken String?
   is_active          Boolean? @default(false)
-  is_approved          Boolean? @default(false)
-  activation_link    String? 
-  role               Role?    
+  is_approved        Boolean? @default(false)
+  activation_link    String?
+  role               Role?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+  cars               Car[]
 
   @@map("users")
 }
-
-
 
 model Admin {
   id Int @id @default(autoincrement())
@@ -50,10 +48,22 @@ model Admin {
   hashedPassword     String
   hashedRefreshToken String?
   is_active          Boolean? @default(false)
-  is_owner         Boolean? @default(false)
+  is_owner           Boolean? @default(false)
   activation_link    String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
   @@map("admin")
+}
+
+model Car {
+  id           Int    @id @default(autoincrement())
+  plate_number String
+  vin_number   String
+  model        String
+  year         String
+  user         User   @relation(fields: [userId], references: [id])
+  userId       Int
+
+  @@map("car")
 }
