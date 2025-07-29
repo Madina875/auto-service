@@ -1,0 +1,9 @@
+npm install prisma --save-dev
+
+npm i --save @nestjs/config
+
+npx prisma migrate dev --name init
+npm i bcrypt
+npm i -D @types/bcrypt
+npm install --save @nestjs/jwt
+

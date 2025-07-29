@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   ServiceUnavailableException,
@@ -15,6 +16,13 @@ import { MailService } from "../mail/mail.serivce";
 import { CreateUserDto } from "../users/dto/create-user.dto";
 import { SignInUserDto } from "../users/dto/signin-user.dto";
 import { CreateAdminDto, SignInAdminDto } from "../admin/dto";
+import {
+  JwtPayload,
+  JwtPayloadAdmin,
+  ResponceFieldsAdmin,
+  ResponceFieldsUser,
+  Tokens,
+} from "../common/types";
 
 @Injectable()
 export class AuthService {
@@ -24,7 +32,7 @@ export class AuthService {
     private readonly mailService: MailService
   ) {}
 
-  private async generateTokens(user: User) {
+  private async generateTokens(user: User): Promise<Tokens> {
     const jwtConfigByRole = {
       OWNER: {
         accessSecret: process.env.OWNER_ACCESS_TOKEN_KEY,
@@ -52,7 +60,7 @@ export class AuthService {
       throw new Error(`JWT config not found for role: ${role}`);
     }
 
-    const payload = {
+    const payload: JwtPayload = {
       id: user.id,
       email: user.email,
       is_active: user.is_active,
@@ -76,8 +84,8 @@ export class AuthService {
     };
   }
 
-  private async generateTokensAdmin(admin: Admin) {
-    const payload = {
+  private async generateTokensAdmin(admin: Admin): Promise<Tokens> {
+    const payload: JwtPayloadAdmin = {
       id: admin.id,
       email: admin.email,
       is_active: admin.is_active,
@@ -188,7 +196,10 @@ export class AuthService {
     };
   }
 
-  async signin(signInUserDto: SignInUserDto, res: Response) {
+  async signin(
+    signInUserDto: SignInUserDto,
+    res: Response
+  ): Promise<ResponceFieldsUser> {
     const { email, password } = signInUserDto;
     const user = await this.prismaService.user.findUnique({ where: { email } });
 
@@ -223,7 +234,10 @@ export class AuthService {
     };
   }
 
-  async signinAdmin(signInAdminDto: SignInAdminDto, res: Response) {
+  async signinAdmin(
+    signInAdminDto: SignInAdminDto,
+    res: Response
+  ): Promise<ResponceFieldsAdmin> {
     const { email, password } = signInAdminDto;
     const admin = await this.prismaService.admin.findUnique({
       where: { email },
@@ -242,9 +256,7 @@ export class AuthService {
       throw new NotFoundException("email or password incorrect");
     }
 
-    const { accessToken, refreshToken } = await this.generateTokensAdmin(
-      admin!
-    );
+    const { accessToken, refreshToken } = await this.generateTokensAdmin(admin);
 
     const hashedRefreshToken = await bcrypt.hash(refreshToken, 7);
 
@@ -260,7 +272,7 @@ export class AuthService {
 
     return {
       message: "foydalanuvchi tizimga kirdi",
-      adminId: admin!.id,
+      adminId: admin.id,
       accessToken,
     };
   }
@@ -299,43 +311,50 @@ export class AuthService {
     return { message: "Account activated!" };
   }
 
-  async signout(id: number, res: Response) {
-    const candidate = await this.prismaService.user.findUnique({
-      where: { id },
-    });
-
-    await this.prismaService.user.update({
-      where: { id: candidate!.id },
+  async signout(userId: number, res: Response) {
+    const candidate = await this.prismaService.user.updateMany({
+      where: {
+        id: userId,
+        hashedRefreshToken: {
+          not: null,
+        },
+      },
       data: { hashedRefreshToken: null },
     });
 
-    res.clearCookie("refreshToken");
-    res.json({ message: `User with id ${id} signed out successfully!` });
-  }
-
-  async signoutAdmin(id: number, res: Response) {
-    const candidate = await this.prismaService.admin.findUnique({
-      where: { id },
-    });
-
-    await this.prismaService.admin.update({
-      where: { id: candidate!.id },
-      data: { hashedRefreshToken: null },
-    });
-
-    res.clearCookie("refreshToken");
-    res.json({ message: `Admin with id ${id} signed out successfully!` });
-  }
-
-  async updateRefreshToken(id: number, req: Request, res: Response) {
-    const refreshToken = req.cookies?.refreshToken;
-
-    if (!refreshToken) {
-      throw new BadRequestException("Refresh token not found in cookies");
+    if (!candidate) {
+      throw new ForbiddenException("Access Denied");
     }
 
+    res.clearCookie("refreshToken");
+    return true;
+  }
+
+  async signoutAdmin(adminId: number, res: Response) {
+    const candidate = await this.prismaService.admin.updateMany({
+      where: {
+        id: adminId,
+        hashedRefreshToken: {
+          not: null,
+        },
+      },
+      data: { hashedRefreshToken: null },
+    });
+
+    if (!candidate) {
+      throw new ForbiddenException("Access Denied");
+    }
+    res.clearCookie("refreshToken");
+    return true;
+  }
+
+  async updateRefreshToken(
+    userId: number,
+    refreshToken: string,
+    res: Response
+  ): Promise<ResponceFieldsUser> {
     const user = await this.prismaService.user.findUnique({
-      where: { id },
+      where: { id: userId },
     });
 
     if (!user || !user.hashedRefreshToken) {
@@ -346,41 +365,36 @@ export class AuthService {
       refreshToken,
       user.hashedRefreshToken
     );
-
     if (!tokenMatch) {
       throw new BadRequestException("Invalid refresh token");
     }
+    const tokens: Tokens = await this.generateTokens(user);
+    const hashedRefreshToken = await bcrypt.hash(tokens.refreshToken, 7);
 
-    const { accessToken, refreshToken: newRefreshToken } =
-      await this.generateTokens(user);
-
-    const hashedRefreshToken = await bcrypt.hash(newRefreshToken, 7);
-
-    await this.prismaService.user.update({
+    const updatedUser = await this.prismaService.user.update({
       where: { id: user.id },
       data: { hashedRefreshToken },
     });
 
-    res.cookie("refreshToken", newRefreshToken, {
+    res.cookie("refreshToken", tokens.refreshToken, {
       maxAge: +process.env.COOKIE_TIME!,
       httpOnly: true,
     });
 
-    return res.status(200).json({
-      message: "Tokens refreshed",
-      accessToken,
-    });
+    return {
+      message: "refreshed",
+      userId: user.id,
+      accessToken: tokens.accessToken,
+    };
   }
 
-  async updateRefreshTokenAdmin(id: number, req: Request, res: Response) {
-    const refreshToken = req.cookies?.refreshToken;
-
-    if (!refreshToken) {
-      throw new BadRequestException("Refresh token not found in cookies");
-    }
-
+  async updateRefreshTokenAdmin(
+    adminId: number,
+    refreshToken: string,
+    res: Response
+  ) {
     const admin = await this.prismaService.admin.findUnique({
-      where: { id },
+      where: { id: adminId },
     });
 
     if (!admin || !admin.hashedRefreshToken) {
@@ -396,24 +410,23 @@ export class AuthService {
       throw new BadRequestException("Invalid refresh token");
     }
 
-    const { accessToken, refreshToken: newRefreshToken } =
-      await this.generateTokensAdmin(admin);
-
-    const hashedRefreshToken = await bcrypt.hash(newRefreshToken, 7);
+    const tokens: Tokens = await this.generateTokensAdmin(admin);
+    const hashedRefreshToken = await bcrypt.hash(tokens.refreshToken, 7);
 
     await this.prismaService.admin.update({
       where: { id: admin.id },
       data: { hashedRefreshToken },
     });
 
-    res.cookie("refreshToken", newRefreshToken, {
+    res.cookie("refreshToken", tokens.refreshToken, {
       maxAge: +process.env.COOKIE_TIME!,
       httpOnly: true,
     });
 
-    return res.status(200).json({
-      message: "Tokens refreshed",
-      accessToken,
-    });
+    return {
+      message: "refreshed",
+      userId: admin.id,
+      accessToken: tokens.accessToken,
+    };
   }
 }

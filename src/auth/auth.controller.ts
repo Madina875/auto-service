@@ -2,12 +2,14 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseIntPipe,
-  Patch,
   Post,
   Req,
   Res,
+  UseGuards,
 } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 
@@ -15,6 +17,13 @@ import { Request, Response } from "express";
 import { CreateUserDto } from "../users/dto/create-user.dto";
 import { SignInUserDto } from "../users/dto/signin-user.dto";
 import { CreateAdminDto, SignInAdminDto } from "../admin/dto";
+import {
+  GetCurrentAdminId,
+  GetCurrentUserId,
+  GetCurrrentAdmin,
+  GetCurrrentUser,
+} from "../common/decorators";
+import { RefreshTokenAdminGuard, RefreshTokenGuard } from "../common/guards";
 
 @Controller("auth")
 export class AuthController {
@@ -40,18 +49,25 @@ export class AuthController {
     return this.authService.activate(activationLink);
   }
 
-  @Post("users/signout/:id")
-  async signout(@Param("id", ParseIntPipe) id: number, @Res() res: Response) {
-    return this.authService.signout(id, res);
+  @UseGuards(RefreshTokenGuard)
+  @Post("users/signout")
+  @HttpCode(HttpStatus.OK)
+  async signout(
+    @GetCurrentUserId() userId: number,
+    @Res({ passthrough: true }) res: Response
+  ) {
+    return this.authService.signout(userId, res);
   }
 
-  @Get("users/refresh/:id")
+  @UseGuards(RefreshTokenGuard)
+  @Post("users/refresh")
+  @HttpCode(HttpStatus.OK)
   async refreshToken(
-    @Param("id", ParseIntPipe) id: number,
-    @Req() req: Request,
-    @Res() res: Response
+    @GetCurrentUserId() userId: number,
+    @GetCurrrentUser("refreshToken") refreshToken: string,
+    @Res({ passthrough: true }) res: Response
   ) {
-    return this.authService.updateRefreshToken(id, req, res);
+    return this.authService.updateRefreshToken(userId, refreshToken, res);
   }
 
   //------------------------------------------------------------------------------------------//
@@ -76,21 +92,25 @@ export class AuthController {
     return this.authService.activateAdmin(activationLink);
   }
 
-  @Post("admin/signout/:id")
+  @UseGuards(RefreshTokenAdminGuard)
+  @Post("admin/signout")
+  @HttpCode(HttpStatus.OK)
   async signoutAdmin(
-    @Param("id", ParseIntPipe) id: number,
-    @Res() res: Response
+    @GetCurrentAdminId() adminIn: number,
+    @Res({ passthrough: true }) res: Response
   ) {
-    return this.authService.signoutAdmin(id, res);
+    return this.authService.signoutAdmin(adminIn, res);
   }
 
-  @Get("admin/refresh/:id")
+  @UseGuards(RefreshTokenAdminGuard)
+  @Post("admin/refresh")
+  @HttpCode(HttpStatus.OK)
   async refreshTokenAdmin(
-    @Param("id", ParseIntPipe) id: number,
-    @Req() req: Request,
-    @Res() res: Response
+    @GetCurrentAdminId() adminId: number,
+    @GetCurrrentAdmin("refreshToken") refreshToken: string,
+    @Res({ passthrough: true }) res: Response
   ) {
-    return this.authService.updateRefreshTokenAdmin(id, req, res);
+    return this.authService.updateRefreshTokenAdmin(adminId, refreshToken, res);
   }
 
   //------------------------------------------------------------------------------------------//

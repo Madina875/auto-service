@@ -6,6 +6,12 @@ import { MailModule } from "../mail/mail.module";
 import { UsersModule } from "../users/users.module";
 import { AuthController } from "./auth.controller";
 import { AdminModule } from "../admin/admin.module";
+import {
+  AccessTokenAdminStrategy,
+  AccessTokenStrategy,
+  RefreshTokenAdminStrategy,
+  RefreshTokenStrategyCookie,
+} from "../common/strategies";
 
 @Module({
   imports: [
@@ -16,6 +22,12 @@ import { AdminModule } from "../admin/admin.module";
     AdminModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [
+    AuthService,
+    AccessTokenStrategy,
+    RefreshTokenStrategyCookie,
+    AccessTokenAdminStrategy,
+    RefreshTokenAdminStrategy,
+  ],
 })
 export class AuthModule {}
