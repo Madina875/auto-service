@@ -28,7 +28,7 @@ export class CarService {
 
   findAll() {
     return this.prismaService.car.findMany({
-      include: { user: { select: { id: true, name: true } } },
+      include: { car_history: { include: { user: true } } },
     });
   }
 
@@ -58,7 +58,7 @@ export class CarService {
       },
     });
   }
-  
+
   async remove(id: number) {
     const existingCar = await this.prismaService.car.findUnique({
       where: { id },

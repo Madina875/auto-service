@@ -28,7 +28,9 @@ export class UsersService {
   }
 
   findAll() {
-    return this.prismaService.user.findMany({ include: { cars: true } });
+    return this.prismaService.user.findMany({
+      include: { car_history: { include: { car: true } } },
+    });
   }
 
   findOne(id: number) {
